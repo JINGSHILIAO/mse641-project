@@ -8,7 +8,7 @@ from sklearn.metrics import f1_score
 from transformers import AutoModel, AutoTokenizer, get_scheduler
 from torch.optim import AdamW
 from models.transformer_classifier import TransformerClassifier
-from transformer_based_dataset_large import get_dataloader
+from transformer_based_dataset_big import get_dataloader
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 os.makedirs("task1/outputs", exist_ok=True)
@@ -27,7 +27,7 @@ best_config = None
 summary_logs = []
 
 for config in param_grid:
-    print(f"🔍 Testing config: {config}")
+    print(f"Testing config: {config}")
     train_loader = get_dataloader("data/train.jsonl", batch_size=config["batch_size"],
                                   tokenizer_name="roberta-base", max_len=config["max_len"])
     val_loader = get_dataloader("data/val.jsonl", batch_size=config["batch_size"],
@@ -44,7 +44,7 @@ for config in param_grid:
     log_rows = []
     start_run = time.time()
 
-    for epoch in range(1, 6):  # 5 epochs max
+    for epoch in range(1, 5):  # 4 epochs max
         model.train()
         total_loss, correct, total = 0, 0, 0
         start_time = time.time()
@@ -90,7 +90,7 @@ for config in param_grid:
         val_loss /= len(val_loader)
         duration = time.time() - start_time
 
-        print(f"📚 Epoch {epoch} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.4f} | Val F1: {val_f1:.4f} | ⏱️ Time: {duration:.2f}s")
+        print(f"Epoch {epoch} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.4f} | Val F1: {val_f1:.4f} | Time: {duration:.2f}s")
         log_rows.append([epoch, train_loss, val_loss, val_acc, val_f1, duration])
 
         if val_f1 > best_val_f1:
@@ -100,7 +100,7 @@ for config in param_grid:
         else:
             early_stop_counter += 1
             if early_stop_counter >= 2:
-                print("⏹️ Early stopping triggered.")
+                print("Early stopping triggered.")
                 break
 
     duration = time.time() - start_run
@@ -122,4 +122,4 @@ summary_df = pd.DataFrame(summary_logs)
 summary_df.to_csv("task1/outputs/roberta_gridsearch_summary.csv", index=False)
 
 # Print best config
-print(f"🏆 Best Val F1: {best_f1:.4f} with config: {best_config}")
+print(f"Best Val F1: {best_f1:.4f} with config: {best_config}")

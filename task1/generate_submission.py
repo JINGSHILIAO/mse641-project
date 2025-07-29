@@ -5,18 +5,22 @@ import json
 from tqdm import tqdm
 from transformers import AutoTokenizer
 from models.transformer_classifier import TransformerClassifier
-from transformer_based_dataset import get_dataloader
+# from transformer_based_dataset import get_dataloader
+from transformer_based_dataset_big import get_dataloader
 
 # --- Settings ---
 # model_path = "task1/outputs/best_bert_base_uncased_model.pt"
 # model_name = "bert-base-uncased"
-model_path = "task1/outputs/best_distilbert_model.pt"
-model_name = "distilbert-base-uncased"
-test_path = "data/test.jsonl"
+# model_path = "task1/outputs/best_distilbert_model.pt"
+# model_name = "distilbert-base-uncased"
+model_path = "task1/outputs/best_roberta_tuned_model.pt"
+model_name = "roberta-base"
 
-output_csv = "submission_task1_distilbert.csv"
-batch_size = 32
-max_len = 64
+test_path = "data/test.jsonl"
+# output_csv = "submission_task1_distilbert.csv"
+output_csv = "task1_roberta_tuned.csv"
+batch_size = 16
+max_len = 256
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # --- Label Map ---
