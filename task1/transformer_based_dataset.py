@@ -15,7 +15,7 @@ class BertClickbaitDataset(Dataset):
         with open(filepath, 'r', encoding='utf-8') as f:
             for line in f:
                 entry = json.loads(line)
-                title = entry['targetTitle']
+                title = entry['targetTitle'] #use only title for simple baseline experiment
                 label = entry.get('tags')
                 label = label[0] if label else None
                 self.data.append((title, label))
@@ -42,6 +42,6 @@ class BertClickbaitDataset(Dataset):
             item['labels'] = torch.tensor(label_map[label])
         return item
 
-def get_bert_dataloader(filepath, batch_size=32, tokenizer_name='bert-base-uncased', max_len=64, is_test=False):
+def get_dataloader(filepath, batch_size=32, tokenizer_name='bert-base-uncased', max_len=64, is_test=False):
     dataset = BertClickbaitDataset(filepath, tokenizer_name, max_len, is_test)
     return DataLoader(dataset, batch_size=batch_size, shuffle=not is_test)
