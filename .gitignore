@@ -1,3 +1,53 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Notebook metadata
+.ipynb_checkpoints/
+*.ipynb_metadata
+
+# Model checkpoints 
+*.pt
+*.pth
+*.h5
+*.ckpt
+models/
+
+*.zip
+*.tar.gz
+*.rar
+
+# Data files
+data/
+*.jsonl
+*.csv
+*.tsv
+*.xlsx
+
+# Output files (predictions, logs, visualizations)
+outputs/
+*.log
+*.json
+*.png
+*.jpg
+*.pdf
+*.npy
+
+drive/
+mnt/
+
+.env/
+.venv/
+env/
+venv/
+
+.vscode/
+.idea/
+.DS_Store
+
+submission/
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
