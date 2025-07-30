@@ -2,6 +2,7 @@ import time
 import os
 import torch
 import pandas as pd
+import numpy as np
 from transformers import (
 #    BartForConditionalGeneration,
 #    BartTokenizer,
@@ -30,6 +31,10 @@ num_epochs = 3
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
 
+# Ensure generation tokens are configured
+model.config.eos_token_id = tokenizer.eos_token_id
+model.config.decoder_start_token_id = tokenizer.bos_token_id
+
 # --- Load datasets ---
 train_dataset = ClickbaitSpoilerDatasetParagraphLevel(train_path, tokenizer_name=model_name)
 val_dataset = ClickbaitSpoilerDatasetParagraphLevel(val_path, tokenizer_name=model_name)
@@ -40,9 +45,10 @@ bleu = evaluate.load("bleu")
 
 def compute_metrics(eval_pred):
     predictions, labels = eval_pred
-    preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
-    refs = tokenizer.batch_decode(labels, skip_special_tokens=True)
-    return meteor.compute(predictions=preds, references=refs)
+    predictions = tokenizer.batch_decode(predictions, skip_special_tokens=True)
+    labels = np.where(labels != -100, tokenizer.pad_token_id, labels)
+    references = tokenizer.batch_decode(labels, skip_special_tokens=True)
+    return meteor.compute(predictions=predictions, references=references)
 
 def log_metrics(epoch, loss, meteor_score, bleu_score, train_time):
     from pathlib import Path
@@ -65,6 +71,8 @@ training_args = Seq2SeqTrainingArguments(
     learning_rate=learning_rate,
     num_train_epochs=num_epochs,
     predict_with_generate=True,
+    generation_max_length=64,
+    generation_num_beams=4,  # standard baseline beam size first
     save_total_limit=3,
     remove_unused_columns=True,
     logging_first_step=True,
@@ -113,7 +121,8 @@ for epoch, checkpoint_path in enumerate(checkpoints, 1):
     # Get BLEU
     preds = trainer.predict(val_dataset)
     decoded_preds = tokenizer.batch_decode(preds.predictions, skip_special_tokens=True)
-    decoded_refs = tokenizer.batch_decode(preds.label_ids, skip_special_tokens=True)
+    decoded_labels = np.where(preds.label_ids != -100, preds.label_ids, tokenizer.pad_token_id)
+    decoded_refs = tokenizer.batch_decode(decoded_labels, skip_special_tokens=True)
     val_bleu = bleu.compute(predictions=decoded_preds, references=decoded_refs)["bleu"]
 
     # Save prediction csv
