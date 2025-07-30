@@ -14,8 +14,10 @@ def load_test_inputs(jsonl_path, tokenizer_name="sshleifer/distilbart-cnn-12-6",
             paragraphs = example.get("targetParagraphs", [])
             uid = example.get("id")
 
-            if not post_text or not title or not paragraphs or not uid:
-                continue
+            ids.append(uid)
+
+            if not post_text or not title or not paragraphs:
+              inputs.append("no spoier")
 
             base_input = f"Teaser: {post_text} Title: {title} Article:"
             token_count = len(tokenizer.tokenize(base_input))
@@ -30,8 +32,6 @@ def load_test_inputs(jsonl_path, tokenizer_name="sshleifer/distilbart-cnn-12-6",
 
             article_text = " ".join(selected_paragraphs)
             full_input = f"{base_input} {article_text}".strip()
-
-            ids.append(uid)
             inputs.append(full_input)
 
     return ids, inputs

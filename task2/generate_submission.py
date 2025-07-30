@@ -46,7 +46,7 @@ spoilers = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
 
 submission_df = pd.DataFrame({
-    "id": range(len(spoilers)), 
+    "id": ids, 
     "spoiler": spoilers
 })
 
