@@ -1,0 +1,112 @@
+import os
+import torch
+import nltk
+import time
+import pandas as pd
+from transformers import (
+    AutoTokenizer, 
+    AutoModelForSeq2SeqLM, 
+    Seq2SeqTrainer, 
+    Seq2SeqTrainingArguments
+)
+from distilbart_dataset import get_dataloaders
+from nltk.translate.meteor_score import meteor_score
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
+
+nltk.download("wordnet")
+nltk.download("omw-1.4")
+nltk.download("punkt_tab")
+
+# -------- Configurations --------
+model_checkpoint = "facebook/bart-large"
+output_dir = "./checkpoints/bart-large"
+train_path = "data/train.jsonl"
+val_path = "data/val.jsonl"
+num_train_epochs = 1
+per_device_batch_size = 8
+eval_log_path = "bart_large_eval_summary.csv"
+
+# -------- Load Tokenizer and Data --------
+tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
+train_loader, val_loader = get_dataloaders(train_path, val_path, model_checkpoint, batch_size=per_device_batch_size)
+
+# -------- Load Model --------
+model = AutoModelForSeq2SeqLM.from_pretrained(model_checkpoint)
+
+# -------- Training Arguments --------
+training_args = Seq2SeqTrainingArguments(
+    output_dir=output_dir,
+    evaluation_strategy="epoch",
+    save_strategy="epoch",
+    learning_rate=5e-5,
+    per_device_train_batch_size=per_device_batch_size,
+    per_device_eval_batch_size=per_device_batch_size,
+    weight_decay=0.01,
+    save_total_limit=3,
+    num_train_epochs=num_train_epochs,
+    predict_with_generate=True,
+    logging_dir="./logs",
+    report_to="none"
+)
+
+# -------- Metric Function --------
+def compute_metrics(eval_preds):
+    predictions, labels = eval_preds
+    decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
+    decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
+
+    meteor_scores = [meteor_score([ref], pred) for pred, ref in zip(decoded_preds, decoded_labels)]
+
+    smoothie = SmoothingFunction().method4
+    bleu_scores = [sentence_bleu([ref.split()], pred.split(), smoothing_function=smoothie)
+                   for pred, ref in zip(decoded_preds, decoded_labels)]
+
+    return {
+        "meteor": sum(meteor_scores) / len(meteor_scores),
+        "bleu": sum(bleu_scores) / len(bleu_scores)
+    }
+
+# -------- Trainer --------
+trainer = Seq2SeqTrainer(
+    model=model,
+    tokenizer=tokenizer,
+    args=training_args,
+    train_dataset=train_loader,
+    eval_dataset=val_loader,
+    compute_metrics=compute_metrics
+)
+
+# -------- Train and Track Time --------
+start_time = time.time()
+train_result = trainer.train()
+end_time = time.time()
+
+train_time = round(end_time - start_time, 2)
+print(f"\n⏱️ Total training time: {train_time} seconds")
+
+# -------- Evaluate All Checkpoints --------
+log_rows = []
+checkpoints = sorted([
+    os.path.join(output_dir, d) for d in os.listdir(output_dir)
+    if d.startswith("checkpoint-")
+])
+
+print()
+for ckpt in checkpoints:
+    print(f"📍 Evaluating {ckpt}")
+    model = AutoModelForSeq2SeqLM.from_pretrained(ckpt).to("cuda" if torch.cuda.is_available() else "cpu")
+    trainer.model = model
+    eval_result = trainer.evaluate()
+    
+    log_rows.append({
+        "checkpoint": ckpt,
+        "val_loss": eval_result.get("eval_loss"),
+        "meteor": eval_result.get("eval_meteor"),
+        "bleu": eval_result.get("eval_bleu"),
+        "train_time": train_time
+    })
+
+# -------- Save Log --------
+log_df = pd.DataFrame(log_rows)
+log_df.to_csv(eval_log_path, index=False)
+print(f"\n✅ Evaluation complete. Results saved to {eval_log_path}")
