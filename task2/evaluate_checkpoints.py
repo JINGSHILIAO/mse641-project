@@ -5,10 +5,12 @@ import pandas as pd
 import os
 from distilbart_dataset import ClickbaitSpoilerDatasetParagraphLevel
 
-# Load tokenizer and data
+
 tokenizer = AutoTokenizer.from_pretrained("sshleifer/distilbart-cnn-12-6")
-# Load val_dataset
 val_dataset = ClickbaitSpoilerDatasetParagraphLevel("data/val.jsonl")
+
+meteor = load("meteor")
+bleu = load("bleu")
 
 checkpoints_dir = "./checkpoints/distilbart"
 checkpoint_paths = [os.path.join(checkpoints_dir, d) for d in sorted(os.listdir(checkpoints_dir)) if "checkpoint" in d]
@@ -63,10 +65,6 @@ for path in checkpoint_paths:
 
     decoded_preds = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
     decoded_refs = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
-
-    # Compute metrics
-    meteor = load("meteor")
-    bleu = load("bleu")
     
     meteor_score = meteor.compute(predictions=decoded_preds, references=decoded_refs)["meteor"]
     bleu_score = bleu.compute(predictions=decoded_preds, references=decoded_refs)["bleu"]

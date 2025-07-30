@@ -13,8 +13,8 @@ from transformers import (
     AutoTokenizer,
 )
 import evaluate
+from evaluate import load
 from distilbart_dataset import ClickbaitSpoilerDatasetParagraphLevel
-# from nltk_setup import ensure_nltk_resources
 import re
 
 # --- Config ---
@@ -25,129 +25,209 @@ output_dir = "./checkpoints/distilbart"
 batch_size = 8
 learning_rate = 5e-5
 # num_epochs = 1
-num_epochs = 2
+num_epochs = 3
 
-# --- Load model and tokenizer ---
+# --- Load model, tokenizer and datasets---
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-
-# Ensure generation tokens are configured
-model.config.eos_token_id = tokenizer.eos_token_id
-model.config.decoder_start_token_id = tokenizer.bos_token_id
-
-# --- Load datasets ---
 train_dataset = ClickbaitSpoilerDatasetParagraphLevel(train_path, tokenizer_name=model_name)
 val_dataset = ClickbaitSpoilerDatasetParagraphLevel(val_path, tokenizer_name=model_name)
 
-# --- Metrics: METEOR, BLEU ---
-meteor = evaluate.load("meteor")
-bleu = evaluate.load("bleu")
-
-def compute_metrics(eval_pred):
-    predictions, labels = eval_pred
-
-    if isinstance(predictions, tuple) or predictions.ndim == 3:
-        predictions = np.argmax(predictions, axis=-1)
-
-    predictions = tokenizer.batch_decode(predictions, skip_special_tokens=True)
-
-    labels = np.where(labels != -100, tokenizer.pad_token_id, labels)
-    references = tokenizer.batch_decode(labels, skip_special_tokens=True)
-    
-    return meteor.compute(predictions=predictions, references=references)
-
-def log_metrics(epoch, loss, meteor_score, bleu_score, train_time):
-    from pathlib import Path
-    file_path = "distilbart_val_metrics.csv"
-    write_header = epoch == 1 and not Path(file_path).exists()
-    with open(file_path, "a") as f:
-        if write_header:
-            f.write("epoch,train_time_sec,val_loss,meteor,bleu\n")
-        f.write(f"{epoch},{train_time:.2f},{loss:.4f},{meteor_score:.4f},{bleu_score:.4f}\n")
-
-
-# --- Training arguments ---
 training_args = Seq2SeqTrainingArguments(
     output_dir=output_dir,
     save_strategy="epoch",
-    logging_strategy="steps",
-    logging_steps=50,
     per_device_train_batch_size=batch_size,
     per_device_eval_batch_size=batch_size,
     learning_rate=learning_rate,
     num_train_epochs=num_epochs,
     predict_with_generate=True,
-    generation_max_length=64,
-    generation_num_beams=2,  # one epoch experiment defaulted to 1
-    save_total_limit=2,
-    remove_unused_columns=True,
-    logging_first_step=True,
+#    save_total_limit=2,
     report_to="none",
-    fp16 = True, # Enable mixed precision for GPU
-    disable_tqdm=False
+    fp16=True,
 )
 
-# --- Trainer setup ---
 trainer = Seq2SeqTrainer(
     model=model,
     args=training_args,
     train_dataset=train_dataset,
     eval_dataset=val_dataset,
     tokenizer=tokenizer,
-    data_collator=DataCollatorForSeq2Seq(tokenizer),
-    compute_metrics=compute_metrics
 )
 
-# --- Train and time it ---
-start_time = time.time()
-train_result = trainer.train()
-elapsed = time.time() - start_time
+# ---------------- Training ----------------
+start_train = time.time()
+trainer.train()
+train_time = time.time() - start_train
+print(f"\n⏱️ Total training time: {train_time:.2f} seconds")
 
-# --- Track Evaluation ---
-# eval_result = trainer.evaluate()
-best_meteor = 0
-best_checkpoint = None
+# ---------------- Evaluation ----------------
+meteor = load("meteor")
+bleu = load("bleu")
+results = []
 
-# List actual checkpoint folders
-checkpoints = sorted([
-    os.path.join(output_dir, d) for d in os.listdir(output_dir)
-    if re.match(r"^checkpoint-\d+$", d)
-], key=lambda x: int(x.split("-")[-1]))
+checkpoints = [
+    os.path.join(output_dir, d)
+    for d in sorted(os.listdir(output_dir))
+    if "checkpoint" in d
+]
 
-# Evaluation loop
-for epoch, checkpoint_path in enumerate(checkpoints, 1):
-    print(f"\nEvaluating checkpoint: {checkpoint_path}")
-    model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint_path).to(trainer.args.device)
+for cp in checkpoints:
+    print(f"\n📍 Evaluating {cp}")
+    model = AutoModelForSeq2SeqLM.from_pretrained(cp).to(trainer.args.device)
     trainer.model = model
 
-    eval_result = trainer.evaluate()
-    val_loss = eval_result["eval_loss"]
-    val_meteor = eval_result["eval_meteor"]
-
-    # Get BLEU
+    start_pred = time.time()
     preds = trainer.predict(val_dataset)
-    decoded_preds = tokenizer.batch_decode(preds.predictions, skip_special_tokens=True)
-    decoded_labels = np.where(preds.label_ids != -100, preds.label_ids, tokenizer.pad_token_id)
-    decoded_refs = tokenizer.batch_decode(decoded_labels, skip_special_tokens=True)
-    val_bleu = bleu.compute(predictions=decoded_preds, references=decoded_refs)["bleu"]
+    pred_time = time.time() - start_pred
 
-    # Save prediction csv
-    df = pd.DataFrame({
-        "index": list(range(len(decoded_preds))),
-        "generated": decoded_preds,
-        "reference": decoded_refs
+    raw_preds = preds.predictions[0] if isinstance(preds.predictions, tuple) else preds.predictions
+    if raw_preds.ndim == 3:
+        pred_ids = np.argmax(raw_preds, axis=-1)
+    else:
+        pred_ids = raw_preds
+    pred_ids = np.clip(pred_ids, 0, tokenizer.vocab_size - 1)
+
+    label_ids = np.where(preds.label_ids != -100, preds.label_ids, tokenizer.pad_token_id)
+    decoded_preds = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+    decoded_refs = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
+
+    # Save predictions
+    cp_name = os.path.basename(cp)
+    df = pd.DataFrame({"generated": decoded_preds, "reference": decoded_refs})
+    df.to_csv(f"val_predictions_{cp_name}.csv", index=False)
+
+    # Compute metrics
+    meteor_score = meteor.compute(predictions=decoded_preds, references=decoded_refs)["meteor"]
+    bleu_score = bleu.compute(predictions=decoded_preds, references=decoded_refs)["bleu"]
+
+    results.append({
+        "checkpoint": cp_name,
+        "meteor": meteor_score,
+        "bleu": bleu_score,
+        "train_time_sec": round(train_time, 2) if cp == checkpoints[-1] else "",
+        "predict_time_sec": round(pred_time, 2)
     })
-    df.to_csv(f"val_predictions_distilbart_epoch{epoch}.csv", index=False)
 
-    # Log metrics
-    log_metrics(epoch, val_loss, val_meteor, val_bleu, elapsed)
+# Save metric summary
+summary_df = pd.DataFrame(results)
+summary_df.to_csv("distilbart_eval_summary.csv", index=False)
+print("\n✅ Evaluation complete. Results saved to distilbart_eval_summary.csv")
 
-    # Track best model
-    if val_meteor > best_meteor:
-        best_meteor = val_meteor
-        best_checkpoint = checkpoint_path
+# Ensure generation tokens are configured
+# model.config.eos_token_id = tokenizer.eos_token_id
+# model.config.decoder_start_token_id = tokenizer.bos_token_id
 
-print(f"\n Best checkpoint: {best_checkpoint} with METEOR = {best_meteor:.4f}")
+
+# # --- Metrics: METEOR, BLEU ---
+# meteor = evaluate.load("meteor")
+# bleu = evaluate.load("bleu")
+
+# def compute_metrics(eval_pred):
+#     predictions, labels = eval_pred
+
+#     if isinstance(predictions, tuple) or predictions.ndim == 3:
+#         predictions = np.argmax(predictions, axis=-1)
+
+#     predictions = tokenizer.batch_decode(predictions, skip_special_tokens=True)
+
+#     labels = np.where(labels != -100, tokenizer.pad_token_id, labels)
+#     references = tokenizer.batch_decode(labels, skip_special_tokens=True)
+    
+#     return meteor.compute(predictions=predictions, references=references)
+
+# def log_metrics(epoch, loss, meteor_score, bleu_score, train_time):
+#     from pathlib import Path
+#     file_path = "distilbart_val_metrics.csv"
+#     write_header = epoch == 1 and not Path(file_path).exists()
+#     with open(file_path, "a") as f:
+#         if write_header:
+#             f.write("epoch,train_time_sec,val_loss,meteor,bleu\n")
+#         f.write(f"{epoch},{train_time:.2f},{loss:.4f},{meteor_score:.4f},{bleu_score:.4f}\n")
+
+
+# # --- Training arguments ---
+# training_args = Seq2SeqTrainingArguments(
+#     output_dir=output_dir,
+#     save_strategy="epoch",
+#     logging_strategy="steps",
+#     logging_steps=50,
+#     per_device_train_batch_size=batch_size,
+#     per_device_eval_batch_size=batch_size,
+#     learning_rate=learning_rate,
+#     num_train_epochs=num_epochs,
+#     predict_with_generate=True,
+#     generation_max_length=64,
+#     generation_num_beams=2,  # one epoch experiment defaulted to 1
+#     save_total_limit=2,
+#     remove_unused_columns=True,
+#     logging_first_step=True,
+#     report_to="none",
+#     fp16 = True, # Enable mixed precision for GPU
+#     disable_tqdm=False
+# )
+
+# # --- Trainer setup ---
+# trainer = Seq2SeqTrainer(
+#     model=model,
+#     args=training_args,
+#     train_dataset=train_dataset,
+#     eval_dataset=val_dataset,
+#     tokenizer=tokenizer,
+#     data_collator=DataCollatorForSeq2Seq(tokenizer),
+#     compute_metrics=compute_metrics
+# )
+
+# # --- Train and time it ---
+# start_time = time.time()
+# train_result = trainer.train()
+# elapsed = time.time() - start_time
+
+# # --- Track Evaluation ---
+# # eval_result = trainer.evaluate()
+# best_meteor = 0
+# best_checkpoint = None
+
+# # List actual checkpoint folders
+# checkpoints = sorted([
+#     os.path.join(output_dir, d) for d in os.listdir(output_dir)
+#     if re.match(r"^checkpoint-\d+$", d)
+# ], key=lambda x: int(x.split("-")[-1]))
+
+# # Evaluation loop
+# for epoch, checkpoint_path in enumerate(checkpoints, 1):
+#     print(f"\nEvaluating checkpoint: {checkpoint_path}")
+#     model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint_path).to(trainer.args.device)
+#     trainer.model = model
+
+#     eval_result = trainer.evaluate()
+#     val_loss = eval_result["eval_loss"]
+#     val_meteor = eval_result["eval_meteor"]
+
+#     # Get BLEU
+#     preds = trainer.predict(val_dataset)
+#     decoded_preds = tokenizer.batch_decode(preds.predictions, skip_special_tokens=True)
+#     decoded_labels = np.where(preds.label_ids != -100, preds.label_ids, tokenizer.pad_token_id)
+#     decoded_refs = tokenizer.batch_decode(decoded_labels, skip_special_tokens=True)
+#     val_bleu = bleu.compute(predictions=decoded_preds, references=decoded_refs)["bleu"]
+
+#     # Save prediction csv
+#     df = pd.DataFrame({
+#         "index": list(range(len(decoded_preds))),
+#         "generated": decoded_preds,
+#         "reference": decoded_refs
+#     })
+#     df.to_csv(f"val_predictions_distilbart_epoch{epoch}.csv", index=False)
+
+#     # Log metrics
+#     log_metrics(epoch, val_loss, val_meteor, val_bleu, elapsed)
+
+#     # Track best model
+#     if val_meteor > best_meteor:
+#         best_meteor = val_meteor
+#         best_checkpoint = checkpoint_path
+
+# print(f"\n Best checkpoint: {best_checkpoint} with METEOR = {best_meteor:.4f}")
+
 
 # for epoch in range(1, num_epochs + 1):
 #     print(f"\n=== Epoch {epoch} ===")
