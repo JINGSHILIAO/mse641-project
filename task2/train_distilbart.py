@@ -10,7 +10,7 @@ from transformers import (
     Seq2SeqTrainingArguments,
     DataCollatorForSeq2Seq,
     AutoModelForSeq2SeqLM,
-    AutoTokenizer
+    AutoTokenizer,
 )
 import evaluate
 from distilbart_dataset import ClickbaitSpoilerDatasetParagraphLevel
@@ -25,7 +25,7 @@ output_dir = "./checkpoints/distilbart"
 batch_size = 8
 learning_rate = 5e-5
 # num_epochs = 1
-num_epochs = 3
+num_epochs = 2
 
 # --- Load model and tokenizer ---
 tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -45,9 +45,15 @@ bleu = evaluate.load("bleu")
 
 def compute_metrics(eval_pred):
     predictions, labels = eval_pred
+
+    if isinstance(predictions, tuple) or predictions.ndim == 3:
+        predictions = np.argmax(predictions, axis=-1)
+
     predictions = tokenizer.batch_decode(predictions, skip_special_tokens=True)
+
     labels = np.where(labels != -100, tokenizer.pad_token_id, labels)
     references = tokenizer.batch_decode(labels, skip_special_tokens=True)
+    
     return meteor.compute(predictions=predictions, references=references)
 
 def log_metrics(epoch, loss, meteor_score, bleu_score, train_time):
@@ -72,8 +78,8 @@ training_args = Seq2SeqTrainingArguments(
     num_train_epochs=num_epochs,
     predict_with_generate=True,
     generation_max_length=64,
-    generation_num_beams=4,  # standard baseline beam size first
-    save_total_limit=3,
+    generation_num_beams=2,  # one epoch experiment defaulted to 1
+    save_total_limit=2,
     remove_unused_columns=True,
     logging_first_step=True,
     report_to="none",
