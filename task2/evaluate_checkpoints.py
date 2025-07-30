@@ -16,8 +16,8 @@ best_meteor = 0
 best_checkpoint = None
 
 for i, checkpoint_path in enumerate(checkpoints, 1):
-    print(f"\n🔍 Evaluating checkpoint: {checkpoint_path}")
-    model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint_path)
+    print(f"\n Evaluating checkpoint: {checkpoint_path}")
+    model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint_path).to(trainer.args.device)
     trainer.model = model
 
     eval_result = trainer.evaluate()
@@ -42,4 +42,4 @@ for i, checkpoint_path in enumerate(checkpoints, 1):
         best_meteor = val_meteor
         best_checkpoint = checkpoint_path
 
-print(f"\n🏆 Best checkpoint: {best_checkpoint} with METEOR = {best_meteor:.4f}")
+print(f"\n Best checkpoint: {best_checkpoint} with METEOR = {best_meteor:.4f}")

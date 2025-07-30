@@ -3,12 +3,13 @@ import os
 import torch
 import pandas as pd
 from transformers import (
-    BartForConditionalGeneration,
-    BartTokenizer,
+#    BartForConditionalGeneration,
+#    BartTokenizer,
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
     DataCollatorForSeq2Seq,
-    AutoModelForSeq2SeqLM
+    AutoModelForSeq2SeqLM,
+    AutoTokenizer
 )
 import evaluate
 from distilbart_dataset import ClickbaitSpoilerDatasetParagraphLevel
@@ -26,8 +27,8 @@ learning_rate = 5e-5
 num_epochs = 3
 
 # --- Load model and tokenizer ---
-tokenizer = BartTokenizer.from_pretrained(model_name)
-model = BartForConditionalGeneration.from_pretrained(model_name)
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
 
 # --- Load datasets ---
 train_dataset = ClickbaitSpoilerDatasetParagraphLevel(train_path, tokenizer_name=model_name)
@@ -80,7 +81,7 @@ trainer = Seq2SeqTrainer(
     eval_dataset=val_dataset,
     tokenizer=tokenizer,
     data_collator=DataCollatorForSeq2Seq(tokenizer),
-    # compute_metrics=compute_metrics
+    compute_metrics=compute_metrics
 )
 
 # --- Train and time it ---
@@ -99,9 +100,10 @@ checkpoints = sorted([
     if re.match(r"^checkpoint-\d+$", d)
 ], key=lambda x: int(x.split("-")[-1]))
 
+# Evaluation loop
 for epoch, checkpoint_path in enumerate(checkpoints, 1):
     print(f"\nEvaluating checkpoint: {checkpoint_path}")
-    model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint_path)
+    model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint_path).to(trainer.args.device)
     trainer.model = model
 
     eval_result = trainer.evaluate()
