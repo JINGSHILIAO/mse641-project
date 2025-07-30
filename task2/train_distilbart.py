@@ -58,7 +58,7 @@ trainer = Seq2SeqTrainer(
 start_train = time.time()
 trainer.train()
 train_time = time.time() - start_train
-print(f"\n⏱️ Total training time: {train_time:.2f} seconds")
+print(f"\n Total training time: {train_time:.2f} seconds")
 
 # ---------------- Evaluation ----------------
 meteor = load("meteor")
@@ -72,8 +72,18 @@ checkpoints = [
 ]
 
 for cp in checkpoints:
-    print(f"\n📍 Evaluating {cp}")
+    print(f"\n Evaluating {cp}")
     model = AutoModelForSeq2SeqLM.from_pretrained(cp).to(trainer.args.device)
+    
+    # Override configs
+    model.generation_config.num_beams = 1
+    model.generation_config.min_length = 1
+    model.generation_config.length_penalty = 1.0
+    model.generation_config.early_stopping = False
+
+    # debug: check config
+    print(model.generation_config)
+
     trainer.model = model
 
     start_pred = time.time()
@@ -111,7 +121,7 @@ for cp in checkpoints:
 # Save metric summary
 summary_df = pd.DataFrame(results)
 summary_df.to_csv("distilbart_eval_summary.csv", index=False)
-print("\n✅ Evaluation complete. Results saved to distilbart_eval_summary.csv")
+print("\n Evaluation complete. Results saved to distilbart_eval_summary.csv")
 
 # Ensure generation tokens are configured
 # model.config.eos_token_id = tokenizer.eos_token_id
