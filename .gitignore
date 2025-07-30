@@ -7,6 +7,7 @@ __pycache__/
 *.ipynb_metadata
 
 # Model checkpoints 
+checkpoints/
 *.pt
 *.pth
 *.h5
