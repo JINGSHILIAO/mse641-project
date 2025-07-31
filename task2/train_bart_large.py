@@ -54,8 +54,13 @@ training_args = Seq2SeqTrainingArguments(
     report_to="none"
 )
 
+
+smoothie = SmoothingFunction().method4
+
 # -------- Metric Function --------
 def compute_metrics(eval_preds):
+    predictions, labels = eval_preds
+
     # Convert logits to token IDs (argmax over vocab dimension)
     if isinstance(predictions, tuple):  # for models with extra outputs
         predictions = predictions[0]
@@ -67,10 +72,15 @@ def compute_metrics(eval_preds):
     decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
     # Compute metrics (example: METEOR and BLEU)
-    meteor_scores = [meteor_score([ref], pred) for pred, ref in zip(decoded_preds, decoded_labels)]
-    smoothie = SmoothingFunction().method4
-    bleu_scores = [sentence_bleu([ref.split()], pred.split(), smoothing_function=smoothie)
-                   for pred, ref in zip(decoded_preds, decoded_labels)]
+    meteor_scores = [
+      meteor_score([ref.split()], pred.split())
+      for pred, ref in zip(decoded_preds, decoded_labels)
+    ]
+
+    bleu_scores = [
+        sentence_bleu([ref.split()], pred.split(), smoothing_function=smoothie)
+        for pred, ref in zip(decoded_preds, decoded_labels)
+    ]
 
     return {
         "meteor": sum(meteor_scores) / len(meteor_scores),
@@ -93,7 +103,10 @@ train_result = trainer.train()
 end_time = time.time()
 
 train_time = round(end_time - start_time, 2)
-print(f"\n⏱️ Total training time: {train_time} seconds")
+print(f"\n Total training time: {train_time} seconds")
+
+# save model before going into eval
+trainer.save_model("checkpoints/bart-large-final")
 
 # -------- Evaluate All Checkpoints --------
 log_rows = []
@@ -104,7 +117,7 @@ checkpoints = sorted([
 
 print()
 for ckpt in checkpoints:
-    print(f"📍 Evaluating {ckpt}")
+    print(f"Evaluating {ckpt}")
     model = AutoModelForSeq2SeqLM.from_pretrained(ckpt).to(trainer.args.device)
     trainer.model = model
     eval_result = trainer.evaluate()
@@ -120,4 +133,4 @@ for ckpt in checkpoints:
 # -------- Save Log --------
 log_df = pd.DataFrame(log_rows)
 log_df.to_csv(eval_log_path, index=False)
-print(f"\n✅ Evaluation complete. Results saved to {eval_log_path}")
+print(f"\n Evaluation complete. Results saved to {eval_log_path}")
