@@ -66,27 +66,54 @@ class ClickbaitSpoilerDatasetParagraphLevel(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        item = self.data[idx]
-        model_input = self.tokenizer(
-            item["input_text"],
-            max_length=self.max_input_tokens,
-            truncation=True,
-            padding="max_length",
-            return_tensors="pt"
-        )
-        target = self.tokenizer(
-            item["target_text"],
-            max_length=self.max_target_tokens,
-            truncation=True,
-            padding="max_length",
-            return_tensors="pt"
-        )
+      item = self.data[idx]
+      input_text = item["input_text"]
+      target_text = item["target_text"]
 
-        return {
-            "input_ids": model_input["input_ids"].squeeze(0),
-            "attention_mask": model_input["attention_mask"].squeeze(0),
-            "labels": target["input_ids"].squeeze(0)
-        }
+      model_input = self.tokenizer(
+          input_text,
+          truncation=True,
+          max_length=self.max_input_tokens,
+          padding="max_length",
+          return_tensors="pt"
+      )
+
+
+      label_input = self.tokenizer(
+          target_text,
+          max_length=self.max_input_tokens,
+          padding="max_length",
+          truncation=True,
+          return_tensors="pt"
+      )
+      
+
+      return {
+          "input_ids": model_input["input_ids"].squeeze(0),
+          "attention_mask": model_input["attention_mask"].squeeze(0),
+          "labels": label_input["input_ids"].squeeze(0)
+      }
+
+        # model_input = self.tokenizer(
+        #     item["input_text"],
+        #     max_length=self.max_input_tokens,
+        #     truncation=True,
+        #     padding="max_length",
+        #     return_tensors="pt"
+        # )
+        # target = self.tokenizer(
+        #     item["target_text"],
+        #     max_length=self.max_target_tokens,
+        #     truncation=True,
+        #     padding="max_length",
+        #     return_tensors="pt"
+        # )
+
+        # return {
+        #     "input_ids": model_input["input_ids"].squeeze(0),
+        #     "attention_mask": model_input["attention_mask"].squeeze(0),
+        #     "labels": target["input_ids"].squeeze(0)
+        # }
 
 def get_dataloaders(train_path, val_path, tokenizer_name="sshleifer/distilbart-cnn-12-6",
                     batch_size=1, shuffle=True, num_workers=0):

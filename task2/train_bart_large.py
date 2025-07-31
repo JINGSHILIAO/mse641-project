@@ -3,6 +3,7 @@ import torch
 import nltk
 import time
 import pandas as pd
+import numpy as np
 from transformers import (
     AutoTokenizer, 
     AutoModelForSeq2SeqLM, 
@@ -10,6 +11,7 @@ from transformers import (
     Seq2SeqTrainingArguments
 )
 from distilbart_dataset import get_dataloaders
+from distilbart_dataset import ClickbaitSpoilerDatasetParagraphLevel
 from nltk.translate.meteor_score import meteor_score
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 
@@ -18,31 +20,34 @@ nltk.download("omw-1.4")
 nltk.download("punkt_tab")
 
 # -------- Configurations --------
-model_checkpoint = "facebook/bart-large"
+model_name = "facebook/bart-large"
 output_dir = "./checkpoints/bart-large"
 train_path = "data/train.jsonl"
 val_path = "data/val.jsonl"
 num_train_epochs = 1
-per_device_batch_size = 8
+per_device_batch_size = 4
 eval_log_path = "bart_large_eval_summary.csv"
 
 # -------- Load Tokenizer and Data --------
-tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
-train_loader, val_loader = get_dataloaders(train_path, val_path, model_checkpoint, batch_size=per_device_batch_size)
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+train_loader, val_loader = get_dataloaders(train_path, val_path, model_name, batch_size=per_device_batch_size)
+
+train_dataset = ClickbaitSpoilerDatasetParagraphLevel(train_path, model_name)
+val_dataset = ClickbaitSpoilerDatasetParagraphLevel(val_path, model_name)
 
 # -------- Load Model --------
-model = AutoModelForSeq2SeqLM.from_pretrained(model_checkpoint)
+model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
 
 # -------- Training Arguments --------
 training_args = Seq2SeqTrainingArguments(
     output_dir=output_dir,
-    evaluation_strategy="epoch",
+    eval_strategy="epoch",
     save_strategy="epoch",
     learning_rate=5e-5,
     per_device_train_batch_size=per_device_batch_size,
     per_device_eval_batch_size=per_device_batch_size,
     weight_decay=0.01,
-    save_total_limit=3,
+ #   save_total_limit=3,
     num_train_epochs=num_train_epochs,
     predict_with_generate=True,
     logging_dir="./logs",
@@ -51,19 +56,25 @@ training_args = Seq2SeqTrainingArguments(
 
 # -------- Metric Function --------
 def compute_metrics(eval_preds):
-    predictions, labels = eval_preds
-    decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
+    # Convert logits to token IDs (argmax over vocab dimension)
+    if isinstance(predictions, tuple):  # for models with extra outputs
+        predictions = predictions[0]
+
+    pred_ids = np.argmax(predictions, axis=-1)
+
+    # Decode
+    decoded_preds = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
     decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
+    # Compute metrics (example: METEOR and BLEU)
     meteor_scores = [meteor_score([ref], pred) for pred, ref in zip(decoded_preds, decoded_labels)]
-
     smoothie = SmoothingFunction().method4
     bleu_scores = [sentence_bleu([ref.split()], pred.split(), smoothing_function=smoothie)
                    for pred, ref in zip(decoded_preds, decoded_labels)]
 
     return {
         "meteor": sum(meteor_scores) / len(meteor_scores),
-        "bleu": sum(bleu_scores) / len(bleu_scores)
+        "bleu": sum(bleu_scores) / len(bleu_scores),
     }
 
 # -------- Trainer --------
@@ -71,8 +82,8 @@ trainer = Seq2SeqTrainer(
     model=model,
     tokenizer=tokenizer,
     args=training_args,
-    train_dataset=train_loader,
-    eval_dataset=val_loader,
+    train_dataset=train_dataset,
+    eval_dataset=val_dataset,
     compute_metrics=compute_metrics
 )
 
@@ -94,7 +105,7 @@ checkpoints = sorted([
 print()
 for ckpt in checkpoints:
     print(f"📍 Evaluating {ckpt}")
-    model = AutoModelForSeq2SeqLM.from_pretrained(ckpt).to("cuda" if torch.cuda.is_available() else "cpu")
+    model = AutoModelForSeq2SeqLM.from_pretrained(ckpt).to(trainer.args.device)
     trainer.model = model
     eval_result = trainer.evaluate()
     
