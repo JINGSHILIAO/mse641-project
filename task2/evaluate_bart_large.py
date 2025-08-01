@@ -7,7 +7,7 @@ from distilbart_dataset import ClickbaitSpoilerDatasetParagraphLevel
 import evaluate
 
 # --- Configuration ---
-model_dir = "checkpoints/bart-large-final"
+model_dir = "checkpoints/bart-large" # change this to the checkpoint dir 
 eval_file = "data/val.jsonl"
 model_name = "facebook/bart-large"
 batch_size = 4
@@ -63,7 +63,7 @@ trainer = Seq2SeqTrainer(
 
 # --- Evaluate ---
 metrics = trainer.evaluate()
-print("📊 Final Evaluation on bart-large-first:")
+print(" Evaluation on {model_dir}:")
 print(metrics)
 
 # --- Generate predictions and save to CSV ---
@@ -82,4 +82,4 @@ for idx, (pred, label) in enumerate(zip(decoded_preds, decoded_labels)):
 
 df = pd.DataFrame(rows)
 df.to_csv("bart_large_generated.csv", index=False)
-print("✅ Predictions saved to bart_large_generated.csv")
+print("Predictions saved to bart_large_generated.csv")

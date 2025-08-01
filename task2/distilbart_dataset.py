@@ -1,6 +1,6 @@
 import json
 from torch.utils.data import Dataset, DataLoader
-from transformers import BartTokenizer
+from transformers import AutoTokenizer
 
 class ClickbaitSpoilerDatasetParagraphLevel(Dataset):
     """
@@ -11,10 +11,10 @@ class ClickbaitSpoilerDatasetParagraphLevel(Dataset):
       - Abstractive humanSpoiler is used as the target
     """
 
-    def __init__(self, jsonl_path, tokenizer_name="sshleifer/distilbart-cnn-12-6",
+    def __init__(self, jsonl_path, tokenizer_name,
                  max_input_tokens=950, max_target_tokens=64, max_paragraphs=12):
         self.data = []
-        self.tokenizer = BartTokenizer.from_pretrained(tokenizer_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         self.max_input_tokens = max_input_tokens
         self.max_target_tokens = max_target_tokens
         self.max_paragraphs = max_paragraphs
@@ -87,12 +87,15 @@ class ClickbaitSpoilerDatasetParagraphLevel(Dataset):
           return_tensors="pt"
       )
       
+      # mask pad tokens
+      labels[labels == self.tokenizer.pad_token_id] = -100
 
       return {
           "input_ids": model_input["input_ids"].squeeze(0),
           "attention_mask": model_input["attention_mask"].squeeze(0),
           "labels": label_input["input_ids"].squeeze(0)
       }
+
 
         # model_input = self.tokenizer(
         #     item["input_text"],
