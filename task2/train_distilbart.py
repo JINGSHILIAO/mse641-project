@@ -12,116 +12,131 @@ from transformers import (
     AutoModelForSeq2SeqLM,
     AutoTokenizer,
 )
-import evaluate
-from evaluate import load
-from distilbart_dataset import ClickbaitSpoilerDatasetParagraphLevel
-import re
+# import evaluate
+# from evaluate import load
+from dataset import ClickbaitSpoilerDatasetParagraphLevel
+# import re
 
-# --- Config ---
+# configs
 model_name = "sshleifer/distilbart-cnn-12-6"
 train_path = "data/train.jsonl"
-val_path = "data/val.jsonl"
+# val_path = "data/val.jsonl"
 output_dir = "./checkpoints/distilbart"
-batch_size = 8
-learning_rate = 5e-5
-# num_epochs = 1
+batch_size = 4
 num_epochs = 3
 
-# --- Load model, tokenizer and datasets---
+# more configs to tune and help model trainnig
+# weight_decay=0.01
+warmup_steps=500
+# label_smoothing_factor=0.1
+learning_rate = 2e-5
+
+
+# load tokenizer, model and dataset
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
 train_dataset = ClickbaitSpoilerDatasetParagraphLevel(train_path, tokenizer_name=model_name)
-val_dataset = ClickbaitSpoilerDatasetParagraphLevel(val_path, tokenizer_name=model_name)
+# val_dataset = ClickbaitSpoilerDatasetParagraphLevel(val_path, tokenizer_name=model_name)
 
+# training setup
 training_args = Seq2SeqTrainingArguments(
     output_dir=output_dir,
+    overwrite_output_dir=True,
     save_strategy="epoch",
     per_device_train_batch_size=batch_size,
-    per_device_eval_batch_size=batch_size,
+    gradient_accumulation_steps=4, # to simulate larger batch size for stability
+    warmup_steps=warmup_steps,
+    # per_device_eval_batch_size=batch_size,
     learning_rate=learning_rate,
     num_train_epochs=num_epochs,
-    predict_with_generate=True,
-#    save_total_limit=2,
+    # weight_decay=weight_decay,
+    predict_with_generate=False, # not evaluating in this script
+    #save_total_limit=2,
     report_to="none",
     fp16=True,
+    logging_steps=100
 )
 
 trainer = Seq2SeqTrainer(
     model=model,
     args=training_args,
     train_dataset=train_dataset,
-    eval_dataset=val_dataset,
+    # eval_dataset=val_dataset,
     tokenizer=tokenizer,
 )
 
-# ---------------- Training ----------------
+# Train and time it
 start_train = time.time()
 trainer.train()
 train_time = time.time() - start_train
 print(f"\n Total training time: {train_time:.2f} seconds")
 
-# ---------------- Evaluation ----------------
-meteor = load("meteor")
-bleu = load("bleu")
-results = []
+trainer.save_model(output_dir)
+print(f"Model saved to: {output_dir}")
 
-checkpoints = [
-    os.path.join(output_dir, d)
-    for d in sorted(os.listdir(output_dir))
-    if "checkpoint" in d
-]
 
-for cp in checkpoints:
-    print(f"\n Evaluating {cp}")
-    model = AutoModelForSeq2SeqLM.from_pretrained(cp).to(trainer.args.device)
+# # ---------------- Evaluation ----------------
+# meteor = load("meteor")
+# bleu = load("bleu")
+# results = []
+
+# checkpoints = [
+#     os.path.join(output_dir, d)
+#     for d in sorted(os.listdir(output_dir))
+#     if "checkpoint" in d
+# ]
+
+# for cp in checkpoints:
+#     print(f"\n Evaluating {cp}")
+#     model = AutoModelForSeq2SeqLM.from_pretrained(cp).to(trainer.args.device)
     
-    # Override configs
-    model.generation_config.num_beams = 1
-    model.generation_config.min_length = 1
-    model.generation_config.length_penalty = 1.0
-    model.generation_config.early_stopping = False
+#     # Override configs
+#     model.generation_config.num_beams = 1
+#     model.generation_config.min_length = 1
+#     model.generation_config.length_penalty = 1.0
+#     model.generation_config.early_stopping = False
 
-    # debug: check config
-    print(model.generation_config)
+#     # debug: check config
+#     # print(model.generation_config)
 
-    trainer.model = model
+#     trainer.model = model
 
-    start_pred = time.time()
-    preds = trainer.predict(val_dataset)
-    pred_time = time.time() - start_pred
+#     start_pred = time.time()
+#     preds = trainer.predict(val_dataset)
+#     pred_time = time.time() - start_pred
 
-    raw_preds = preds.predictions[0] if isinstance(preds.predictions, tuple) else preds.predictions
-    if raw_preds.ndim == 3:
-        pred_ids = np.argmax(raw_preds, axis=-1)
-    else:
-        pred_ids = raw_preds
-    pred_ids = np.clip(pred_ids, 0, tokenizer.vocab_size - 1)
+#     raw_preds = preds.predictions[0] if isinstance(preds.predictions, tuple) else preds.predictions
+#     if raw_preds.ndim == 3:
+#         pred_ids = np.argmax(raw_preds, axis=-1)
+#     else:
+#         pred_ids = raw_preds
+#     pred_ids = np.clip(pred_ids, 0, tokenizer.vocab_size - 1)
 
-    label_ids = np.where(preds.label_ids != -100, preds.label_ids, tokenizer.pad_token_id)
-    decoded_preds = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-    decoded_refs = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
+#     label_ids = np.where(preds.label_ids != -100, preds.label_ids, tokenizer.pad_token_id)
+#     decoded_preds = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+#     decoded_refs = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
 
-    # Save predictions
-    cp_name = os.path.basename(cp)
-    df = pd.DataFrame({"generated": decoded_preds, "reference": decoded_refs})
-    df.to_csv(f"val_predictions_{cp_name}.csv", index=False)
+#     # Save predictions
+#     cp_name = os.path.basename(cp)
+#     df = pd.DataFrame({"generated": decoded_preds, "reference": decoded_refs})
+#     df.to_csv(f"val_predictions_{cp_name}.csv", index=False)
 
-    # Compute metrics
-    meteor_score = meteor.compute(predictions=decoded_preds, references=decoded_refs)["meteor"]
-    bleu_score = bleu.compute(predictions=decoded_preds, references=decoded_refs)["bleu"]
+#     # Compute metrics
+#     meteor_score = meteor.compute(predictions=decoded_preds, references=decoded_refs)["meteor"]
+#     bleu_score = bleu.compute(predictions=decoded_preds, references=decoded_refs)["bleu"]
 
-    results.append({
-        "checkpoint": cp_name,
-        "meteor": meteor_score,
-        "bleu": bleu_score,
-        "train_time_sec": round(train_time, 2) if cp == checkpoints[-1] else "",
-        "predict_time_sec": round(pred_time, 2)
-    })
+#     results.append({
+#         "checkpoint": cp_name,
+#         "meteor": meteor_score,
+#         "bleu": bleu_score,
+#         "train_time_sec": round(train_time, 2) if cp == checkpoints[-1] else "",
+#         "predict_time_sec": round(pred_time, 2)
+#     })
 
-# Save metric summary
-summary_df = pd.DataFrame(results)
-summary_df.to_csv("distilbart_eval_summary.csv", index=False)
-print("\n Evaluation complete. Results saved to distilbart_eval_summary.csv")
+# # Save metric summary
+# summary_df = pd.DataFrame(results)
+# summary_df.to_csv("distilbart_eval_summary.csv", index=False)
+# print("\n Evaluation complete. Results saved to distilbart_eval_summary.csv")
 
 # Ensure generation tokens are configured
 # model.config.eos_token_id = tokenizer.eos_token_id

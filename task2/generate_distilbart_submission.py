@@ -1,11 +1,11 @@
 import pandas as pd
 import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-from distilbart_load_test_inputs import load_test_inputs
+from load_test_inputs import load_test_inputs
 
-checkpoint_path = "./checkpoints/distilbart/checkpoint-1008"
+checkpoint_path = "./checkpoints/distilbart/checkpoint-504"
 test_path = "data/test.jsonl"
-output_path = "distilbart_submission.csv"
+output_path = "distilbart_submission_test.csv"
 max_tokens = 950  # token cutoff to match training logic
 
 tokenizer = AutoTokenizer.from_pretrained(checkpoint_path)
@@ -15,10 +15,10 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 
 # Set model configs (make sure it's the same)
-model.generation_config.num_beams = 1
+model.generation_config.num_beams = 4
 model.generation_config.min_length = 1
 model.generation_config.length_penalty = 1.0
-model.generation_config.early_stopping = False
+# model.generation_config.early_stopping = False
 
 ids, texts = load_test_inputs(test_path, tokenizer_name=checkpoint_path, max_tokens=max_tokens)
 
