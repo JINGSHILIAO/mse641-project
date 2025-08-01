@@ -81,19 +81,20 @@ class ClickbaitSpoilerDatasetParagraphLevel(Dataset):
 
       label_input = self.tokenizer(
           target_text,
-          max_length=self.max_input_tokens,
+          max_length=self.max_target_tokens,
           padding="max_length",
           truncation=True,
           return_tensors="pt"
       )
       
-      # mask pad tokens
+      # Squeeze and apply mask
+      labels = label_input["input_ids"].squeeze(0)
       labels[labels == self.tokenizer.pad_token_id] = -100
 
       return {
           "input_ids": model_input["input_ids"].squeeze(0),
           "attention_mask": model_input["attention_mask"].squeeze(0),
-          "labels": label_input["input_ids"].squeeze(0)
+          "labels": labels
       }
 
 
