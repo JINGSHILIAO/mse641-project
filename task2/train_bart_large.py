@@ -11,7 +11,7 @@ from transformers import (
     Seq2SeqTrainingArguments
 )
 # from distilbart_dataset import get_dataloaders
-from distilbart_dataset import ClickbaitSpoilerDatasetParagraphLevel
+from dataset import ClickbaitSpoilerDatasetParagraphLevel
 # from nltk.translate.meteor_score import meteor_score
 # from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 
@@ -19,27 +19,28 @@ from distilbart_dataset import ClickbaitSpoilerDatasetParagraphLevel
 # nltk.download("omw-1.4")
 # nltk.download("punkt_tab")
 
-# -------- Configurations --------
+# configs
 model_name = "facebook/bart-large"
 output_dir = "./checkpoints/bart-large"
 train_path = "data/train.jsonl"
-val_path = "data/val.jsonl"
-num_epochs = 1
+# val_path = "data/val.jsonl"
+num_epochs = 3 # <- change this to desired number of epochs
 batch_size = 4
-learning_rate = 5e-5
+#learning_rate = 5e-5
+learning_rate = 2e-5 # <- better LR for the dataset size
 # eval_log_path = "bart_large_eval_summary.csv"
 
-# -------- Load Tokenizer and Model --------
+# Load tokenizer and model
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
 # train_loader, val_loader = get_dataloaders(train_path, val_path, model_name, batch_size=per_device_batch_size)
 
-# -------- Load Datasets --------
+# load dataset
 train_dataset = ClickbaitSpoilerDatasetParagraphLevel(train_path, model_name)
-val_dataset = ClickbaitSpoilerDatasetParagraphLevel(val_path, model_name)
+# val_dataset = ClickbaitSpoilerDatasetParagraphLevel(val_path, model_name)
 
 
-# -------- Training Arguments --------
+# define training args
 training_args = Seq2SeqTrainingArguments(
     output_dir=output_dir,
     overwrite_output_dir=True,
@@ -51,10 +52,10 @@ training_args = Seq2SeqTrainingArguments(
     # eval_strategy = "no",
     weight_decay=0.01,
     # save_total_limit=3,
-    # generation_max_length=64,
-    # generation_num_beams=4,
+    generation_max_length=128,
+    generation_num_beams=4,
     num_train_epochs=num_epochs,
-    predict_with_generate=True,
+    # predict_with_generate=True,
     logging_dir="./logs",
     report_to="none"
 )
@@ -92,7 +93,7 @@ training_args = Seq2SeqTrainingArguments(
 #         "bleu": sum(bleu_scores) / len(bleu_scores),
 #     }
 
-# -------- Trainer --------
+# Trainer setup
 trainer = Seq2SeqTrainer(
     model=model,
     tokenizer=tokenizer,
@@ -102,7 +103,7 @@ trainer = Seq2SeqTrainer(
     # compute_metrics=compute_metrics
 )
 
-# -------- Train and Track Time --------
+# Train and track rain time
 start_time = time.time()
 # train_result = trainer.train()
 trainer.train()
@@ -111,7 +112,7 @@ end_time = time.time()
 train_time = round(end_time - start_time, 2)
 print(f"\n Total training time: {train_time} seconds")
 
-# save model before going into eval
+# save model
 trainer.save_model(output_dir)
 print(f" Model saved to {output_dir}")
 

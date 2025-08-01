@@ -12,7 +12,7 @@ class ClickbaitSpoilerDatasetParagraphLevel(Dataset):
     """
 
     def __init__(self, jsonl_path, tokenizer_name,
-                 max_input_tokens=950, max_target_tokens=64, max_paragraphs=12):
+                 max_input_tokens=950, max_target_tokens=64, max_paragraphs=15):
         self.data = []
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         self.max_input_tokens = max_input_tokens

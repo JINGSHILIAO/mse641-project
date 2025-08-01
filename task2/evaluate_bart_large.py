@@ -3,23 +3,23 @@ import numpy as np
 import torch
 import pandas as pd
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, Seq2SeqTrainer, Seq2SeqTrainingArguments
-from distilbart_dataset import ClickbaitSpoilerDatasetParagraphLevel
+from dataset import ClickbaitSpoilerDatasetParagraphLevel
 import evaluate
 
-# --- Configuration ---
-model_dir = "checkpoints/bart-large" # change this to the checkpoint dir 
+# configs
+model_dir = "checkpoints/bart-large/checkpoint-1344" # change this to the checkpoint dir 
 eval_file = "data/val.jsonl"
 model_name = "facebook/bart-large"
 batch_size = 4
 
-# --- Load tokenizer and model ---
+# load tokenizer and model
 tokenizer = AutoTokenizer.from_pretrained(model_dir)
 model = AutoModelForSeq2SeqLM.from_pretrained(model_dir)
 
-# --- Load evaluation dataset ---
+# load val data
 eval_dataset = ClickbaitSpoilerDatasetParagraphLevel(eval_file, model_name)
 
-# --- Load official evaluation metrics ---
+# metrics
 meteor = evaluate.load("meteor")
 bleu = evaluate.load("bleu")
 
@@ -48,7 +48,7 @@ def compute_metrics(eval_preds):
         "bleu": bleu_result["bleu"]
     }
 
-# --- Seq2Seq Trainer Setup ---
+# Trainer setup
 args = Seq2SeqTrainingArguments(
     output_dir="./eval_results",
     per_device_eval_batch_size=batch_size,
@@ -66,12 +66,12 @@ trainer = Seq2SeqTrainer(
     eval_dataset=eval_dataset,
 )
 
-# --- Evaluate ---
+# train and evaluate
 metrics = trainer.evaluate()
 print(" Evaluation on {model_dir}:")
 print(metrics)
 
-# --- Generate predictions using model.generate() ---
+# generate spoilers
 model.eval()
 generated_texts = []
 reference_texts = []
@@ -97,7 +97,7 @@ for example in eval_dataset:
     generated_texts.append(decoded_pred.strip())
     reference_texts.append(decoded_label.strip())
 
-# --- Save to CSV ---
+# save spoilers to csv
 rows = []
 for idx, (pred, label) in enumerate(zip(generated_texts, reference_texts)):
     rows.append({
@@ -109,27 +109,3 @@ for idx, (pred, label) in enumerate(zip(generated_texts, reference_texts)):
 df = pd.DataFrame(rows)
 df.to_csv("bart_large_generated.csv", index=False)
 print("Predictions saved to bart_large_generated.csv")
-
-# # --- Generate predictions and save to CSV ---
-# raw_preds = trainer.predict(eval_dataset)
-# pred_ids = np.argmax(raw_preds.predictions, axis=-1)
-# decoded_preds = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-
-# cleaned_label_ids = [
-#     [token if token != -100 else tokenizer.pad_token_id for token in label]
-#     for label in raw_preds.label_ids
-# ]
-# decoded_labels = tokenizer.batch_decode(cleaned_label_ids, skip_special_tokens=True)
-
-
-# rows = []
-# for idx, (pred, label) in enumerate(zip(decoded_preds, decoded_labels)):
-#     rows.append({
-#         "id": idx,
-#         "prediction": pred.strip(),
-#         "reference": label.strip()
-#     })
-
-# df = pd.DataFrame(rows)
-# df.to_csv("bart_large_generated.csv", index=False)
-# print("Predictions saved to bart_large_generated.csv")
