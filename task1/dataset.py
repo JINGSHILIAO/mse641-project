@@ -5,7 +5,7 @@ import json
 
 label_map = {"phrase": 0, "passage": 1, "multi": 2}
 
-class BertClickbaitDataset(Dataset):
+class ClickbaitSpoilerTypeDataset(Dataset):
     def __init__(self, filepath, tokenizer_name='bert-base-uncased', max_len=64, is_test=False):
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         self.max_len = max_len
@@ -15,16 +15,21 @@ class BertClickbaitDataset(Dataset):
         with open(filepath, 'r', encoding='utf-8') as f:
             for line in f:
                 entry = json.loads(line)
-                title = entry['targetTitle'] #use only title for simple baseline experiment
+                post_text = entry['postText']
+                target_title = entry['targetTitle'] 
+                # concatenate postText and targetTitle
+                combined_text = f"{post_text} {self.tokenizer.sep_token} {target_title}"
+
                 label = entry.get('tags')
                 label = label[0] if label else None
-                self.data.append((title, label))
+                self.data.append((combined_text, label))
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
         text, label = self.data[idx]
+
         encoding = self.tokenizer(
             text,
             truncation=True,
@@ -34,8 +39,8 @@ class BertClickbaitDataset(Dataset):
         )
 
         item = {
-            'input_ids': encoding['input_ids'].squeeze(),
-            'attention_mask': encoding['attention_mask'].squeeze()
+            'input_ids': encoding['input_ids'].squeeze(0),
+            'attention_mask': encoding['attention_mask'].squeeze(0)
         }
 
         if not self.is_test and label is not None:
@@ -43,5 +48,5 @@ class BertClickbaitDataset(Dataset):
         return item
 
 def get_dataloader(filepath, batch_size=32, tokenizer_name='bert-base-uncased', max_len=64, is_test=False):
-    dataset = BertClickbaitDataset(filepath, tokenizer_name, max_len, is_test)
+    dataset = ClickbaitSpoilerTypeDataset(filepath, tokenizer_name, max_len, is_test)
     return DataLoader(dataset, batch_size=batch_size, shuffle=not is_test)
