@@ -12,7 +12,10 @@ class ClickbaitSpoilerDatasetParagraphLevel(Dataset):
     """
 
     def __init__(self, jsonl_path, tokenizer_name,
-                 max_input_tokens=950, max_target_tokens=64, max_paragraphs=15):
+             *,  # forces keyword arguments
+             max_input_tokens=950,
+             max_target_tokens=64,
+             max_paragraphs=15):
         self.data = []
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         self.max_input_tokens = max_input_tokens
@@ -90,6 +93,8 @@ class ClickbaitSpoilerDatasetParagraphLevel(Dataset):
       # Squeeze and apply mask
       labels = label_input["input_ids"].squeeze(0)
       labels[labels == self.tokenizer.pad_token_id] = -100
+
+    #   print(f"[DEBUG] input_ids: {model_input['input_ids'].shape}, labels: {labels.shape}")
 
       return {
           "input_ids": model_input["input_ids"].squeeze(0),

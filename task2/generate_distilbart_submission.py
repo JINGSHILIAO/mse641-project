@@ -5,8 +5,8 @@ from load_test_inputs import load_test_inputs
 
 checkpoint_path = "./checkpoints/distilbart/checkpoint-504"
 test_path = "data/test.jsonl"
-output_path = "distilbart_submission_test.csv"
-max_tokens = 950  # token cutoff to match training logic
+output_path = "distilbart_submission_v1.csv"
+max_tokens = 1000  # token cutoff to match training logic
 
 tokenizer = AutoTokenizer.from_pretrained(checkpoint_path)
 model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint_path)
@@ -17,7 +17,8 @@ model.to(device)
 # Set model configs (make sure it's the same)
 model.generation_config.num_beams = 4
 model.generation_config.min_length = 1
-model.generation_config.length_penalty = 1.0
+model.generation_config.length_penalty = 0.9
+model.generation_config.no_repeat_ngram_size = 3
 # model.generation_config.early_stopping = False
 
 ids, texts = load_test_inputs(test_path, tokenizer_name=checkpoint_path, max_tokens=max_tokens)
