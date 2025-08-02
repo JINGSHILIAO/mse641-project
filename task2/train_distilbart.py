@@ -132,7 +132,7 @@ for cp in checkpoints:
     model.generation_config.num_beams = 4
     model.generation_config.min_length = 1 # avoid empty outputs
     model.generation_config.max_length = max_target_tokens
-    model.generation_config.length_penalty = 0.9 # encourage model to produce longer sequence
+    model.generation_config.length_penalty = 0.9 # slight prefrence for shorter output
     model.generation_config.early_stopping = True
 
 #     # debug: check config
