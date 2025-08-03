@@ -4,16 +4,17 @@ from transformers import AutoTokenizer
 
 class ClickbaitSpoilerDatasetParagraphLevel(Dataset):
     """
-    Dataset for Clickbait Spoiling Task (Task 2) using paragraph-level truncation.
-    Ensures:
-      - Only full paragraphs are included (no cutting mid-paragraph)
-      - Token budget is respected (max 950 input tokens)
+    Paragraph-level truncation:
+      - postText, targetTitle and targetParagraphs are used as inputs
+          - Only full paragraphs are included (avoid cutting mid-paragraph)
+      - Token budget is respected (max 1000 input tokens)
+          - 15 paragraphs or 1000 tokens, whicheveer comes first
       - Abstractive humanSpoiler is used as the target
     """
 
     def __init__(self, jsonl_path, tokenizer_name,
              *,  # forces keyword arguments
-             max_input_tokens=950,
+             max_input_tokens=1000,
              max_target_tokens=64,
              max_paragraphs=15):
         self.data = []
@@ -77,7 +78,7 @@ class ClickbaitSpoilerDatasetParagraphLevel(Dataset):
           input_text,
           truncation=True,
           max_length=self.max_input_tokens,
-          padding="max_length",
+          padding=True,
           return_tensors="pt"
       )
 
@@ -85,7 +86,7 @@ class ClickbaitSpoilerDatasetParagraphLevel(Dataset):
       label_input = self.tokenizer(
           target_text,
           max_length=self.max_target_tokens,
-          padding="max_length",
+          padding=True,
           truncation=True,
           return_tensors="pt"
       )
@@ -103,33 +104,12 @@ class ClickbaitSpoilerDatasetParagraphLevel(Dataset):
       }
 
 
-        # model_input = self.tokenizer(
-        #     item["input_text"],
-        #     max_length=self.max_input_tokens,
-        #     truncation=True,
-        #     padding="max_length",
-        #     return_tensors="pt"
-        # )
-        # target = self.tokenizer(
-        #     item["target_text"],
-        #     max_length=self.max_target_tokens,
-        #     truncation=True,
-        #     padding="max_length",
-        #     return_tensors="pt"
-        # )
+# def get_dataloaders(train_path, val_path, tokenizer_name="sshleifer/distilbart-cnn-12-6",
+#                     batch_size=1, shuffle=True, num_workers=0):
+#     train_dataset = ClickbaitSpoilerDatasetParagraphLevel(train_path, tokenizer_name)
+#     val_dataset = ClickbaitSpoilerDatasetParagraphLevel(val_path, tokenizer_name)
 
-        # return {
-        #     "input_ids": model_input["input_ids"].squeeze(0),
-        #     "attention_mask": model_input["attention_mask"].squeeze(0),
-        #     "labels": target["input_ids"].squeeze(0)
-        # }
+#     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
+#     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
-def get_dataloaders(train_path, val_path, tokenizer_name="sshleifer/distilbart-cnn-12-6",
-                    batch_size=1, shuffle=True, num_workers=0):
-    train_dataset = ClickbaitSpoilerDatasetParagraphLevel(train_path, tokenizer_name)
-    val_dataset = ClickbaitSpoilerDatasetParagraphLevel(val_path, tokenizer_name)
-
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-
-    return train_loader, val_loader
+#     return train_loader, val_loader

@@ -3,9 +3,10 @@ import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from load_test_inputs import load_test_inputs
 
-checkpoint_path = "./distilbart-best-model/checkpoints/distilbart/checkpoint-504"
+# checkpoint_path = "./checkpoints/distilbart_baseline/checkpoint-504"
+checkpoint_path = "./checkpoints/bartlarge_baseline/checkpoint-504"
 test_path = "data/test.jsonl"
-output_path = "distilbart_submission_test.csv"
+output_path = "bartlarge_baseline_bestcheckpoint_submission.csv"
 max_tokens = 1000  # token cutoff to match training logic
 
 tokenizer = AutoTokenizer.from_pretrained(checkpoint_path)
@@ -21,6 +22,9 @@ model.generation_config.max_length = 64
 model.generation_config.length_penalty = 0.9
 model.generation_config.no_repeat_ngram_size = 3
 # model.generation_config.early_stopping = False
+
+# double check configs
+print(model.generation_config)
 
 ids, texts = load_test_inputs(test_path, tokenizer_name=checkpoint_path, max_tokens=max_tokens)
 

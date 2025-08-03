@@ -4,8 +4,6 @@ import torch
 import pandas as pd
 import numpy as np
 from transformers import (
-#    BartForConditionalGeneration,
-#    BartTokenizer,
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
     DataCollatorForSeq2Seq,
