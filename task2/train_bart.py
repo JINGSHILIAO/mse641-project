@@ -16,25 +16,23 @@ from transformers.trainer_callback import EarlyStoppingCallback
 from dataset import ClickbaitSpoilerDatasetParagraphLevel 
 import evaluate
 
-# ------------- 🔧 Step 1: Parse command-line arguments -------------------
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--model_name", type=str, default="sshleifer/distilbart-cnn-12-6", help="HuggingFace model ID")
-parser.add_argument("--output_dir", type=str, default="./checkpoints/distilbart", help="Directory to save model/checkpoints")
+parser.add_argument("--model_name", type=str, default="sshleifer/distilbart-cnn-12-6")
+parser.add_argument("--output_dir", type=str, default="./checkpoints/distilbart")
+parser.add_argument("--resume_from_checkpoint", type=str, default=None)
 parser.add_argument("--train_path", type=str, default="data/train.jsonl")
 parser.add_argument("--val_path", type=str, default="data/val.jsonl")
 
 # Training control
-parser.add_argument("--epochs", type=int, default=3)
+parser.add_argument("--epochs", type=int, default=5)
 parser.add_argument("--max_input_tokens", type=int, default=1000)
 parser.add_argument("--max_target_tokens", type=int, default=64)
 parser.add_argument("--max_paragraphs", type=int, default=15)
 
 args = parser.parse_args()
 
-# ------------- 🧠 Step 2: Configure model-specific settings -------------------
-
-# Dynamically adjust batch size and learning rate
+# Model settings
 if "bart-large" in args.model_name:
     learning_rate = 2e-5
     batch_size = 4
@@ -44,14 +42,17 @@ else:  # DistilBART
     batch_size = 4
     gradient_accum_steps = 4
 
-# Additional training configurations
+# Training configurations
 warmup_steps = 200
 label_smoothing = 0.1
 max_grad_norm = 1.0
 
-# ------------- 📦 Step 3: Load tokenizer, model, and datasets -------------------
+# Load tokenizer, model and datasets
 tokenizer = AutoTokenizer.from_pretrained(args.model_name)
-model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name)
+if args.resume_from_checkpoint:
+    model = AutoModelForSeq2SeqLM.from_pretrained(args.resume_from_checkpoint)
+else:
+    model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name)
 
 train_dataset = ClickbaitSpoilerDatasetParagraphLevel(
     jsonl_path=args.train_path,
@@ -69,12 +70,11 @@ val_dataset = ClickbaitSpoilerDatasetParagraphLevel(
     max_paragraphs=args.max_paragraphs
 )
 
-# ------------- 📊 Step 4: Define evaluation metrics -------------------
+# Load metrics
 meteor = evaluate.load("meteor")
 bleu = evaluate.load("bleu")
 rouge = evaluate.load("rouge")
 
-# Original compute_metrics method worked for distilbart
 # def compute_metrics(pred):
 #     label_ids = np.where(pred.label_ids != -100, pred.label_ids, tokenizer.pad_token_id)
 #     decoded_preds = tokenizer.batch_decode(pred.predictions, skip_special_tokens=True)
@@ -86,11 +86,12 @@ rouge = evaluate.load("rouge")
 #         "rougeL": rouge.compute(predictions=decoded_preds, references=decoded_labels)["rougeL"]
 #     }
 
+# Updated compute metrics method
 # Added guards to prevent overflow
 def compute_metrics(eval_preds):
     predictions, labels = eval_preds
 
-    # Handle tuple case (e.g., logits + other outputs)
+    # Handle tuple case
     if isinstance(predictions, tuple):
         predictions = predictions[0]
 
@@ -129,7 +130,6 @@ def compute_metrics(eval_preds):
         "rougeL": rougeL_result["rougeL"]
     }
 
-# ------------- ⚙️ Step 5: Setup training arguments -------------------
 training_args = Seq2SeqTrainingArguments(
     output_dir=args.output_dir,
     overwrite_output_dir=True,
@@ -152,11 +152,10 @@ training_args = Seq2SeqTrainingArguments(
     fp16=True
 )
 
-# ------------- 🧩 Step 6: Data collator and trainer setup -------------------
 data_collator = DataCollatorForSeq2Seq(
     tokenizer=tokenizer,
     model=model,
-    label_pad_token_id=-100  # Important for ignoring pad tokens during loss computation
+    label_pad_token_id=-100  # ignore pad tokens during loss computation
 )
 
 trainer = Seq2SeqTrainer(
@@ -170,16 +169,22 @@ trainer = Seq2SeqTrainer(
     data_collator=data_collator
 )
 
-# ------------- 🏋️ Step 7: Train the model -------------------
+# to resume training from a checkpoint
+if args.resume_from_checkpoint:
+    trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
+else:
+    trainer.train()
+
+# Train and time it
 start_train = time.time()
 trainer.train()
 train_time = time.time() - start_train
-print(f"\n✅ Total training time: {train_time:.2f} seconds")
+print(f"\n Total training time: {train_time:.2f} seconds")
 
 trainer.save_model(args.output_dir)
-print(f"✅ Final model saved to: {args.output_dir}")
+print(f"Model saved to: {args.output_dir}")
 
-# ------------- 🧪 Step 8: Evaluate all checkpoints -------------------
+# Evalaute checkpoints
 checkpoints = sorted([
     os.path.join(args.output_dir, d)
     for d in os.listdir(args.output_dir)
@@ -188,7 +193,7 @@ checkpoints = sorted([
 
 results = []
 for cp in checkpoints:
-    print(f"\n🔍 Evaluating {cp}")
+    print(f"\n Evaluating {cp}")
     model = AutoModelForSeq2SeqLM.from_pretrained(cp)
     model.to(trainer.args.device)
 
@@ -214,7 +219,7 @@ for cp in checkpoints:
     # Save raw predictions
     pred_csv = f"val_predictions_{model.config._name_or_path.replace('/', '_')}_{os.path.basename(cp)}.csv"
     pd.DataFrame({"generated": decoded_preds, "reference": decoded_refs}).to_csv(pred_csv, index=False)
-    print(f"💾 Saved predictions to {pred_csv}")
+    # print(f"Saved predictions to {pred_csv}")
 
     # Save metrics
     meteor_score = meteor.compute(predictions=decoded_preds, references=decoded_refs)["meteor"]
@@ -231,4 +236,4 @@ for cp in checkpoints:
 # Save summary
 summary_csv = f"{args.model_name.split('/')[-1]}_eval_summary.csv"
 pd.DataFrame(results).to_csv(summary_csv, index=False)
-print(f"📈 Saved eval summary to {summary_csv}")
+# print(f"Saved eval summary to {summary_csv}")

@@ -8,8 +8,8 @@ class ClickbaitSpoilerDatasetParagraphLevel(Dataset):
       - postText, targetTitle and targetParagraphs are used as inputs
           - Only full paragraphs are included (avoid cutting mid-paragraph)
       - Token budget is respected (max 1000 input tokens)
-          - 15 paragraphs or 1000 tokens, whicheveer comes first
-      - Abstractive humanSpoiler is used as the target
+          - 15 paragraphs or 1000 tokens, whichever comes first
+      - humanSpoiler (Abstractive) is used as the target
     """
 
     def __init__(self, jsonl_path, tokenizer_name,
@@ -22,6 +22,7 @@ class ClickbaitSpoilerDatasetParagraphLevel(Dataset):
         self.max_input_tokens = max_input_tokens
         self.max_target_tokens = max_target_tokens
         self.max_paragraphs = max_paragraphs
+        self.is_test = is_test
 
         with open(jsonl_path, "r", encoding="utf-8") as f:
             for line in f:
@@ -72,8 +73,6 @@ class ClickbaitSpoilerDatasetParagraphLevel(Dataset):
     def __getitem__(self, idx):
       item = self.data[idx]
       input_text = item["input_text"]
-      target_text = item["target_text"]
-
       model_input = self.tokenizer(
           input_text,
           truncation=True,
@@ -82,34 +81,56 @@ class ClickbaitSpoilerDatasetParagraphLevel(Dataset):
           return_tensors="pt"
       )
 
-
-      label_input = self.tokenizer(
-          target_text,
-          max_length=self.max_target_tokens,
-          padding=True,
-          truncation=True,
-          return_tensors="pt"
-      )
-      
-      # Squeeze and apply mask
-      labels = label_input["input_ids"].squeeze(0)
-      labels[labels == self.tokenizer.pad_token_id] = -100
-
-    #   print(f"[DEBUG] input_ids: {model_input['input_ids'].shape}, labels: {labels.shape}")
-
-      return {
+      result = {
           "input_ids": model_input["input_ids"].squeeze(0),
           "attention_mask": model_input["attention_mask"].squeeze(0),
-          "labels": labels
       }
 
+      if not self.is_test:
+          target_text = item["target_text"]
+          label_input = self.tokenizer(
+              target_text,
+              max_length=self.max_target_tokens,
+              padding=True,
+              truncation=True,
+              return_tensors="pt"
+          )
 
-# def get_dataloaders(train_path, val_path, tokenizer_name="sshleifer/distilbart-cnn-12-6",
-#                     batch_size=1, shuffle=True, num_workers=0):
-#     train_dataset = ClickbaitSpoilerDatasetParagraphLevel(train_path, tokenizer_name)
-#     val_dataset = ClickbaitSpoilerDatasetParagraphLevel(val_path, tokenizer_name)
+          labels = label_input["input_ids"].squeeze(0)
+          labels[labels == self.tokenizer.pad_token_id] = -100
+          result["labels"] = labels
 
-#     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
-#     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+      return result
+      
+    #   item = self.data[idx]
+    #   input_text = item["input_text"]
+    #   target_text = item["target_text"]
 
-#     return train_loader, val_loader
+    #   model_input = self.tokenizer(
+    #       input_text,
+    #       truncation=True,
+    #       max_length=self.max_input_tokens,
+    #       padding=True,
+    #       return_tensors="pt"
+    #   )
+
+
+    #   label_input = self.tokenizer(
+    #       target_text,
+    #       max_length=self.max_target_tokens,
+    #       padding=True,
+    #       truncation=True,
+    #       return_tensors="pt"
+    #   )
+      
+    #   # Squeeze and apply mask
+    #   labels = label_input["input_ids"].squeeze(0)
+    #   labels[labels == self.tokenizer.pad_token_id] = -100
+
+    # #   print(f"[DEBUG] input_ids: {model_input['input_ids'].shape}, labels: {labels.shape}")
+
+    #   return {
+    #       "input_ids": model_input["input_ids"].squeeze(0),
+    #       "attention_mask": model_input["attention_mask"].squeeze(0),
+    #       "labels": labels
+    #   }
