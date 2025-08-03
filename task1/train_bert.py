@@ -1,12 +1,14 @@
 import torch
 from torch.types import Device
 from torch.utils.data import DataLoader
+import torch.nn as nn
 from transformers import AutoModelForSequenceClassification, get_linear_schedule_with_warmup
 from torch.optim import AdamW
 from sklearn.metrics import accuracy_score, f1_score, classification_report
 import numpy as np
 from tqdm.auto import tqdm
 from dataset import get_dataloader
+
 
 # Configurations
 # MODEL_NAME = 'bert-base-uncased'
@@ -15,6 +17,7 @@ TRAIN_PATH = 'data/train.jsonl'
 VAL_PATH = 'data/val.jsonl'
 BATCH_SIZE = 4
 MAX_LEN = 64
+# MAX_LEN = 256 # when including paraghraph context
 EPOCHS = 3
 LR = 2e-5
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -127,4 +130,4 @@ for epoch in range(EPOCHS):
     print(f"[Val] Loss: {val_loss:.4f} | Accuracy: {val_acc:.4f} | Macro-F1: {val_f1:.4f}")
 
 # Save the model after training
-model.save_pretrained('roberta_base_baseline_3_epochs')
+model.save_pretrained('roberta_base_with_context_3_epochs')

@@ -6,9 +6,10 @@ import pandas as pd
 from dataset import ClickbaitSpoilerTypeDataset
 
 # === CONFIG ===
-MODEL_DIR = "roberta_base_baseline_3_epochs"
+# MODEL_DIR = "roberta_base_baseline_3_epochs"
+MODEL_DIR = "roberta_gridsearch_runs/roberta_d02_wd001"
 TEST_PATH = "data/test.jsonl"
-OUTPUT_CSV = "roberta_baseline_submission.csv"
+OUTPUT_CSV = "roberta_d02_wd001_submission.csv"
 BATCH_SIZE = 4
 MAX_LEN = 64
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")

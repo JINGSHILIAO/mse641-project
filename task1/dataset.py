@@ -17,8 +17,11 @@ class ClickbaitSpoilerTypeDataset(Dataset):
                 entry = json.loads(line)
                 post_text = entry['postText']
                 target_title = entry['targetTitle'] 
+                target_paragraphs = entry.get('targetParagraphs', [])
+                # Join the first 5 paragraphs if they exist
+                paragraph_context = " ".join(target_paragraphs[:5]) if target_paragraphs else ""
                 # concatenate postText and targetTitle
-                combined_text = f"{post_text} {self.tokenizer.sep_token} {target_title}"
+                combined_text = f"{post_text} {self.tokenizer.sep_token} {target_title} {self.tokenizer.sep_token} {paragraph_context}"
 
                 label = entry.get('tags')
                 label = label[0] if label else None
