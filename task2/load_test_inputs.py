@@ -1,8 +1,8 @@
-def load_test_inputs(jsonl_path, tokenizer_name="sshleifer/distilbart-cnn-12-6", max_tokens=950):
-    from transformers import BartTokenizer
+def load_test_inputs(jsonl_path, tokenizer_name, max_tokens=1000):
+    from transformers import AutoTokenizer
     import json
 
-    tokenizer = BartTokenizer.from_pretrained(tokenizer_name)
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
     ids = []
     inputs = []
 
