@@ -18,7 +18,6 @@ max_target_tokens = 64
 max_paragraphs = 15
 batch_size = 4
 
-# Lodat tokenizer, val dataset and model
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 val_dataset = ClickbaitSpoilerDatasetParagraphLevel(
     jsonl_path=val_path,

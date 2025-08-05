@@ -236,4 +236,3 @@ for cp in checkpoints:
 # Save summary
 summary_csv = f"{args.model_name.split('/')[-1]}_eval_summary.csv"
 pd.DataFrame(results).to_csv(summary_csv, index=False)
-# print(f"Saved eval summary to {summary_csv}")
