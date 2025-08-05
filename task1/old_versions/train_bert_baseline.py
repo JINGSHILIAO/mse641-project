@@ -15,7 +15,6 @@ import pandas as pd
 from bert_dataset import get_bert_dataloader
 from models.transformer_classifier import TransformerClassifier
 
-# Settings
 # model_name = "distilbert-base-uncased"
 model_name = "bert-base-uncased"
 train_path = "data/train.jsonl"
@@ -29,19 +28,15 @@ early_stopping_patience = 2
 csv_log_path = "outputs/train_bert_base_uncased_log.csv"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Dataloaders
 train_loader = get_bert_dataloader(train_path, batch_size, model_name, max_len)
 val_loader = get_bert_dataloader(val_path, batch_size, model_name, max_len, is_test=False)
 
-# Model
 model = TransformerClassifier(model_name=model_name, num_labels=3)
 model.to(device)
 
-# Optimizer & Loss
 optimizer = AdamW(model.parameters(), lr=lr)
 loss_fn = nn.CrossEntropyLoss()
 
-# Logging setup
 os.makedirs("outputs", exist_ok=True)
 log_rows = []
 best_val_f1 = 0

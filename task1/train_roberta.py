@@ -10,7 +10,7 @@ from sklearn.metrics import f1_score, accuracy_score
 from tqdm import tqdm
 import torch.nn as nn
 
-# === Argument Parser ===
+# Run from terminal
 parser = argparse.ArgumentParser()
 parser.add_argument("--dropout", type=float, default=0.1)
 parser.add_argument("--weight_decay", type=float, default=0.01)
@@ -19,31 +19,26 @@ parser.add_argument("--batch_size", type=int, default=32)
 parser.add_argument("--output_dir", type=str, default="runs/roberta_default")
 args = parser.parse_args()
 
-# === Config ===
 MODEL_NAME = "roberta-base"
 MAX_LEN = 64
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 TRAIN_PATH = "data/train.jsonl"
 VAL_PATH = "data/val.jsonl"
 
-# === Data ===
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 train_dataset = ClickbaitSpoilerTypeDataset(TRAIN_PATH, tokenizer_name=MODEL_NAME, max_len=MAX_LEN)
 val_dataset = ClickbaitSpoilerTypeDataset(VAL_PATH, tokenizer_name=MODEL_NAME, max_len=MAX_LEN)
 train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=args.batch_size)
 
-# === Model ===
 model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, num_labels=3)
 model.config.hidden_dropout_prob = args.dropout
 model.to(DEVICE)
 
-# === Optimizer & Loss ===
 class_weights = torch.tensor([0.6639, 0.7124, 1.6236], device=DEVICE)  # from earlier
 criterion = nn.CrossEntropyLoss(weight=class_weights)
 optimizer = AdamW(model.parameters(), lr=2e-5, weight_decay=args.weight_decay)
 
-# === Eval Function ===
 def evaluate(model, loader):
     model.eval()
     all_preds, all_labels = [], []
@@ -66,7 +61,6 @@ def evaluate(model, loader):
     f1 = f1_score(all_labels, all_preds, average="macro")
     return total_loss / len(loader), acc, f1
 
-# === Training Loop ===
 best_f1 = 0
 patience = 2
 patience_counter = 0
@@ -116,9 +110,9 @@ for epoch in range(1, args.epochs + 1):
                 "train_acc": train_acc,
                 "train_f1": train_f1
             }, f)
-        print("✅ Saved best model so far.")
+        print("Saved best model so far")
     else:
         patience_counter += 1
         if patience_counter >= patience:
-            print("⏹️ Early stopping triggered.")
+            print("Early stopping triggered.")
             break

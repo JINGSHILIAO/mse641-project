@@ -26,7 +26,7 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 train_loader = get_dataloader(TRAIN_PATH, tokenizer_name=MODEL_NAME, batch_size=BATCH_SIZE, max_len=MAX_LEN)
 val_loader = get_dataloader(VAL_PATH, tokenizer_name=MODEL_NAME, batch_size=BATCH_SIZE, max_len=MAX_LEN, is_test=False)
 
-# Compute and set class weights
+# Compute and set class weights tensors
 train_counts = {'phrase': 1367, 'passage': 1274, 'multi': 559}
 total_samples = sum(train_counts.values())
 class_weights = {label: total_samples/count for label, count in train_counts.items()}
@@ -40,10 +40,8 @@ normalized_weights = [
 class_weights_tensor = torch.tensor(normalized_weights).to(DEVICE)
 print("Using Class Weights:", class_weights_tensor)
 
-# Model initilization
 model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, num_labels=3).to(DEVICE)
 
-# Optimizer & Scheduler
 optimizer = AdamW(model.parameters(), lr=LR)
 total_steps = len(train_loader) * EPOCHS
 scheduler = get_linear_schedule_with_warmup(
@@ -52,10 +50,10 @@ scheduler = get_linear_schedule_with_warmup(
     num_training_steps=total_steps
 )
 
-# Loss function with class weights
+# Loss function with class weights tensors
 criterion = torch.nn.CrossEntropyLoss(weight=class_weights_tensor)
 
-# Training Function
+# Training method
 def train_epoch(model, dataloader, optimizer, scheduler, criterion, device):
     model.train()
     total_loss = 0
@@ -88,7 +86,7 @@ def train_epoch(model, dataloader, optimizer, scheduler, criterion, device):
 
     return avg_loss, acc, f1
 
-# Evaluation Function
+# Evaluation method
 def eval_epoch(model, dataloader, criterion, device):
     model.eval()
     total_loss = 0
@@ -114,12 +112,12 @@ def eval_epoch(model, dataloader, criterion, device):
     acc = accuracy_score(all_labels, all_preds)
     f1 = f1_score(all_labels, all_preds, average='macro')
 
-    # Detailed classification report for diagnostics
+    # Classification report for diagnostics
     print(classification_report(all_labels, all_preds, target_names=['phrase', 'passage', 'multi']))
 
     return avg_loss, acc, f1
 
-# Main Training Loop
+# Train and eval
 for epoch in range(EPOCHS):
     print(f"\nEpoch {epoch+1}/{EPOCHS}")
 
@@ -129,5 +127,5 @@ for epoch in range(EPOCHS):
     val_loss, val_acc, val_f1 = eval_epoch(model, val_loader, criterion, DEVICE)
     print(f"[Val] Loss: {val_loss:.4f} | Accuracy: {val_acc:.4f} | Macro-F1: {val_f1:.4f}")
 
-# Save the model after training
+# Save model
 model.save_pretrained('roberta_base_with_context_3_epochs')

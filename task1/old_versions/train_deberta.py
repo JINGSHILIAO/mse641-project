@@ -1,4 +1,3 @@
-
 import os
 import time
 import torch
@@ -13,7 +12,6 @@ from transformer_based_dataset import get_dataloader
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Hyperparameters
 model_name = "microsoft/deberta-v3-small"
 max_len = 64
 batch_size = 16 # reduce batch size to avoid OOM due to more complexity

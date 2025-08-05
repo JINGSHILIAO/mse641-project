@@ -6,7 +6,7 @@ import json
 label_map = {"phrase": 0, "passage": 1, "multi": 2}
 
 class ClickbaitSpoilerTypeDataset(Dataset):
-    def __init__(self, filepath, tokenizer_name='bert-base-uncased', max_len=64, is_test=False):
+    def __init__(self, filepath, tokenizer_name, max_len, is_test=False):
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         self.max_len = max_len
         self.is_test = is_test
@@ -19,8 +19,8 @@ class ClickbaitSpoilerTypeDataset(Dataset):
                 target_title = entry['targetTitle'] 
 
                 # target_paragraphs = entry.get('targetParagraphs', [])
-                # Join the first 5 paragraphs if they exist
-                # paragraph_context = " ".join(target_paragraphs[:5]) if target_paragraphs else ""
+                # Join the first 6 paragraphs if they exist
+                # paragraph_context = " ".join(target_paragraphs[:6]) if target_paragraphs else ""
                 
                 # concatenate postText and targetTitle
                 combined_text = f"{post_text} {self.tokenizer.sep_token} {target_title}"

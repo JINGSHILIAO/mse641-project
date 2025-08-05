@@ -1,61 +1,44 @@
-
-import torch
-import pandas as pd
 import json
-from tqdm import tqdm
-from transformers import AutoTokenizer
-from models.transformer_classifier import TransformerClassifier
-# from transformer_based_dataset import get_dataloader
-from transformer_based_dataset_big import get_dataloader
+import torch
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+from torch.utils.data import DataLoader
+import pandas as pd
+from dataset import ClickbaitSpoilerTypeDataset
 
-# --- Settings ---
-# model_path = "task1/outputs/best_bert_base_uncased_model.pt"
-# model_name = "bert-base-uncased"
-# model_path = "task1/outputs/best_distilbert_model.pt"
-# model_name = "distilbert-base-uncased"
-model_path = "task1/outputs/best_roberta_tuned_model.pt"
-model_name = "roberta-base"
+# MODEL_DIR = "roberta_base_baseline_3_epochs"
+MODEL_DIR = "roberta_gridsearch_runs/roberta_d02_wd001"
+TEST_PATH = "data/test.jsonl"
+OUTPUT_CSV = "roberta_d02_wd001_submission.csv"
+BATCH_SIZE = 4
+MAX_LEN = 64
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-test_path = "data/test.jsonl"
-# output_csv = "submission_task1_distilbert.csv"
-output_csv = "task1_roberta_tuned.csv"
-batch_size = 16
-max_len = 256
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# --- Label Map ---
 id2label = {0: "phrase", 1: "passage", 2: "multi"}
 
-# --- Load test data ---
-test_loader = get_dataloader(test_path, batch_size=batch_size, tokenizer_name=model_name, max_len=max_len, is_test=True)
-
-# --- Load model ---
-model = TransformerClassifier(model_name=model_name, num_labels=3)
-model.load_state_dict(torch.load(model_path, map_location=device))
-model.to(device)
+tokenizer = AutoTokenizer.from_pretrained("roberta-base")
+model = AutoModelForSequenceClassification.from_pretrained(MODEL_DIR).to(DEVICE)
 model.eval()
 
-# --- Predict ---
+test_dataset = ClickbaitSpoilerTypeDataset(TEST_PATH, tokenizer_name="roberta-base", max_len=MAX_LEN, is_test=True)
+test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE)
+
 all_preds = []
 with torch.no_grad():
-    for batch in tqdm(test_loader, desc="Predicting"):
-        input_ids = batch["input_ids"].to(device)
-        attention_mask = batch["attention_mask"].to(device)
+    for batch in test_loader:
+        input_ids = batch['input_ids'].to(DEVICE)
+        attention_mask = batch['attention_mask'].to(DEVICE)
+
         outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-        preds = torch.argmax(outputs, dim=1)
-        all_preds.extend(preds.cpu().numpy())
+        logits = outputs.logits
+        preds = torch.argmax(logits, dim=1).cpu().tolist()
+        all_preds.extend(preds)
 
-# --- Load IDs from test.jsonl ---
-ids = []
-with open(test_path, "r", encoding="utf-8") as f:
-    for line in f:
-        entry = json.loads(line)
-        ids.append(entry["id"])
+predicted_tags = [id2label[p] for p in all_preds]
 
-# --- Save to CSV ---
-df = pd.DataFrame({
-    "id": ids,
-    "spoilerType": [id2label[p] for p in all_preds]
+submission_df = pd.DataFrame({
+    "id": list(range(len(predicted_tags))),
+    "spoilerType": predicted_tags
 })
-df.to_csv(output_csv, index=False)
-print(f"Submission saved to: {output_csv}")
+submission_df.to_csv(OUTPUT_CSV, index=False)
+
+
